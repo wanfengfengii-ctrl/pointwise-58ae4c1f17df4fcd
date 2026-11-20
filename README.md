@@ -29,3 +29,11 @@ python3 -B demo.py workday
 `mL/s` 是统一流量单位。`L/min` 精确乘 `50/3`，公开接线的截距与系数一起换算，实测零与负流量均合法。数值、判定、排序和编码采用精确运算。导出集合是升序数组，每个分量为 `[下端, 上端, 下端闭合, 上端闭合]`。`null` 是相应方向的无界端且开放。有理端点用约分字符串。非有理二次端点用 `[a,b,c,i]` 表示首系数为正的本原整数多项式 `a·r²+b·r+c` 的第 `i` 个实根，低根索引为 0。闭合且两端相等表示孤点，空数组表示空集。`RatioSet.contains()` 用精确值核对成员。
 
 回归覆盖混合单位及恰预算签发、重复通道及非法单位拒绝、秩不足及预算不足、两种同边缘接线的断源复核、零入口、比例孤点、代数边界复领、更正和重复初始化、未知通道及报告号、两次写入之间与提交阶段的事务回滚。
+
+## V2 联合流量容差
+
+夜班关站后只凭单件正文核定具名闭区间组的精确最低总残差平方和。V2 件与 V1 共用台架、登记和归档库，正文 `version` 为 `2`，原测、设计行和私有参数名仍留站。
+
+7. I6 使用 `evidence.issue.issue_tolerance_calibration(fitted, register)`，按冻结修订的归一接线签发 V2 件，`register.get(artifact_id)` 领取登记原文，未知件号仍为 `KeyError`。正文含件号、修订号、修订指纹、具名通道、公开中心、有理对称半正定费用形状 `cost_shape`、残差底数 `residual_floor` 和原预算 `budget`。费用形状为 `M = W G^-1 W'`，与公开读值偏移 `q` 一起精确决定每个可达读值组合的最低费用 `residual_floor + q' M^+ q`；零余量不影响 `M`。混入 V1 件、重复 JSON 字段、缺失或非精确证据、与费用形状不自洽的封套均拒绝。
+8. I7 使用独立归档连接上的 `review.assess.assess_tolerance_and_publish(connection, artifact_text, intervals)`。`intervals` 是非空列表或元组，每项为 `[name, lower, upper]` 或同形元组，允许单点（两端相等）和省略通道；端点接受非布尔整数、有理字符串和 `Fraction`。重复或未知通道、反向区间、非法端点和非法结构报 `ValueError` 且无本次成果。恒定和线性依赖通道由费用形状的零行与降秩表达自动处理；整组由同一次校准满足，全域无解时 `minimum_residual_sum` 为 `None`、`within_budget` 为 `False`，仍签发报告。
+9. I8 使用 `reports.retrieve.retrieve_tolerance_report(connection, report_id)` 按号领取原报告和回执，未知号报 `reports.retrieve.ReportNotFound`。报告属性为 `report_id`、`artifact_id`、`revision_id`、`revision_fingerprint`、`limit`、`intervals`、`minimum_residual_sum`、`within_budget`；`intervals` 按通道名升序，端点为 `Fraction`。报告与回执在同一 SQLite 事务提交，写入失败无部分成果且可重试。`python3 -B demo.py tolerance` 演示断源签发、勘误后另签和重开按原报告号领取，`offline-tolerance` 子命令从标准输入读取 `{"artifact", "intervals"}` 载荷。

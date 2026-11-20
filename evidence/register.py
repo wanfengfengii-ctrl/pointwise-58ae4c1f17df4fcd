@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from evidence.channels import PublicReadings
 from evidence.codec import CalibrationArtifact, encode_artifact
+from evidence.tolerance_codec import ToleranceArtifact, encode_tolerance_artifact
 
 
 class IssueRegister:
@@ -41,6 +42,28 @@ class IssueRegister:
                 INSERT INTO issued_calibrations (artifact_id, revision_id, body) VALUES (?, ?, ?)
             ''', (artifact.artifact_id, revision_id, body))
         return artifact
+
+    def record_artifact(self, revision_id, fingerprint, artifact: ToleranceArtifact):
+        if artifact.revision_id != revision_id or artifact.revision_fingerprint != fingerprint:
+            raise ValueError('tolerance artifact does not match the frozen revision')
+        body = encode_tolerance_artifact(artifact)
+        self._begin()
+        with self.connection:
+            source = self.connection.execute('''
+                SELECT fingerprint FROM bench_revisions WHERE revision_id = ?
+            ''', (revision_id,)).fetchone()
+            if source is None or source[0] != fingerprint:
+                raise ValueError('calibration revision is absent from this bench register')
+            self.connection.execute('''
+                INSERT INTO issued_calibrations (artifact_id, revision_id, body) VALUES (?, ?, ?)
+            ''', (artifact.artifact_id, revision_id, body))
+        return artifact
+
+    def issue_tolerance_identity(self, revision_id, fingerprint, evidence):
+        artifact = ToleranceArtifact(
+            f'{revision_id}/c{uuid4().hex}', revision_id, fingerprint, evidence
+        )
+        return self.record_artifact(revision_id, fingerprint, artifact)
 
     def get(self, artifact_id):
         row = self.connection.execute('''
